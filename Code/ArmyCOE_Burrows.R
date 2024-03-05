@@ -268,8 +268,11 @@ write.csv(sturgeonMapDetections, paste0(owd, "/", "sturgeonMapDetections.csv"))
 # figures & shit ----------------------------------------------------------
 
 ########################################### FUTURE BRI FIGURE GOALS ###########################################
+
   #want to work on gamm smoothing plots to look at presence over time (ordinal day), moonphase and decimal hour
   #create network analyses using bipartite graphs (using the igraph package in R) -> look at highways between nodes
+  #maybe break COA into time of day to see if this habitat use shifts throughout the day?
+    #check to see if 15 minutes is the usual binned timeframe for COA
 
 
 
@@ -531,7 +534,7 @@ test <- mergedDetectionsTags %>%
         legend.key.width=unit(1,"cm"))
 test
 
-#----- test COA calculations -----#
+#----- sturgeon COA calculations -----#
 sturgCOA <- mergedDetectionsTags %>% 
   mutate(dti=lubridate::round_date(EST, "15 mins")) %>% 
   group_by(dti, transmitterID) %>% 
@@ -581,6 +584,8 @@ sturgeonCOA <- ggplot() +
         legend.box.margin=margin(0,0,0,0))
 sturgeonCOA
 ggsave(paste0(owd,"/","sturgeonCOA.png"))
+
+# testing out network analysis things -------------------------------------
 
 
 
