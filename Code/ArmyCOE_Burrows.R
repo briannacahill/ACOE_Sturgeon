@@ -587,8 +587,33 @@ ggsave(paste0(owd,"/","sturgeonCOA.png"))
 
 # testing out network analysis things -------------------------------------
 
+#have to do a fake network analysis becayse the receivers are within 1 km of each other, doesn't work properly
+  #plus sp is deprecated so need to find an sf workaround for other projects
 
+sturg_summary <- mergedDetectionsTags %>%
+  filter(common_name == "Atlantic sturgeon") %>%   
+  arrange(EST) %>%
+  group_by(tag_id) %>%
+  dplyr::mutate(llon=lag(Longitude), llat=lag(Latitude)) %>%  # lag longitude, lag latitude (previous position)
+  filter(Longitude!=lag(Longitude)) %>%  # If you didn't change positions, drop this row.
+  filter(!is.na(llon)) %>%  
+  group_by(Latitude, Longitude, llon, llat) %>% 
+  summarise(count = n()) %>% 
+  dplyr::mutate(fakeBins = case_when(
+    count < 100 ~ "Low Use",
+    count >= 100 & count < 800 ~ "Moderate Use",
+    count >= 800 ~ "High Use")) %>% 
+  dplyr::mutate(fakeBins = factor(fakeBins, levels = c("Low Use", "Moderate Use", "High Use")))
+# Also drop any NA lag longitudes (i.e. the first detection of each)
+#mutate(bearing=argosfilter::bearing(llat, Latitude, llon, Longitude)) %>% # use mutate and argosfilter to add bearings!
+#mutate(dist=argosfilter::distance(llat, Latitude, llon, Longitude)) # use mutate and argosfilter to add distances!
 
+ggplot() +  # xend and yend define your segments
+  geom_segment(data = sturg_summary, aes(x=llon, xend=Longitude, y=llat, yend=Latitude, color = fakeBins, size = fakeBins)) + 
+  #geom_curve(data = sturg_summary, aes(x=llon, xend=Longitude, y=llat, yend=Latitude, color = fakeBins, size = fakeBins)) +   
+  scale_size_manual(values=c(1, 2, 3)) + # and geom_segment() and geom_curve() will connect them
+geom_point(data = receivers, aes(Longitude, Latitude), color = "black", size = 3.5)    
+  
 # omitted stuff -----------------------------------------------------------
 
 #----- zoomed in version of abacus plot, highlighting specific timeframes -----#
