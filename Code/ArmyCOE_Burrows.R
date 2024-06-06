@@ -844,3 +844,4 @@ stationInfo$longitude <- as.factor(stationInfo$longitude)
 
 sturgeonTags <- merge(sturgeonTags, unique(stationInfo)[, c("Station.Name", "latitude", "longitude")], by="Station.Name", all.x=TRUE)
 
+#test for bri
