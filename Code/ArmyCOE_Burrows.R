@@ -28,12 +28,21 @@ library(janitor)
 library(gt)
 library(sf)
 library(ggspatial)
+library(viridis)
+library(ggpubr)
 
 # data prep ---------------------------------------------------------------
 
 #gotta take all vrl files, import them into vue, export and then import into R
-detections <- read.csv ("detections_ACOE_20231228.csv", header = TRUE) 
-detections <- detections[c("Date.and.Time..UTC.","Receiver","Transmitter", "Station.Name", "Latitude", "Longitude")]
+#detections <- read.csv ("detections_ACOE_20231228.csv", header = TRUE) 
+#detections <- detections[c("Date.and.Time..UTC.","Receiver","Transmitter", "Station.Name", "Latitude", "Longitude")]
+
+det2021 <- read.csv ("ACOE_detections_2021.csv", header = TRUE) 
+det2022 <- read.csv ("ACOE_detections_2022.csv", header = TRUE)
+det2023 <- read.csv ("ACOE_detections_2023.csv", header = TRUE)
+det2024 <- read.csv ("ACOE_detections_2024_INCOMPLETE.csv", header = TRUE)
+
+detections <- rbind(det2021, det2022, det2023, det2024)
 
 receivers <- read.csv ("BurrowRockaways_ReceiverLocations.csv", header = TRUE) %>% 
   filter(Status == "Active") %>% 
@@ -71,7 +80,11 @@ detectionsFiltered$Month <- format(as.Date(detectionsFiltered$dateEST), "%B")
 detectionsFiltered$MonthYR <- format(as.Date(detectionsFiltered$dateEST), "%B %Y")
 detectionsFiltered$MonthYR <- as.factor(detectionsFiltered$MonthYR)
 detectionsFiltered$MonthYR <- factor(detectionsFiltered$MonthYR, levels = c("December 2021", "January 2022", "February 2022", "March 2022", "April 2022", 
-                                                                      "May 2022", "June 2022", "July 2022", "August 2022", "September 2022")) #redo levels for monthYR
+                                                                      "May 2022", "June 2022", "July 2022", "August 2022", "September 2022", "October 2022", 
+                                                                      "November 2022", "December 2022", "January 2023", "February 2023", "March 2023",
+                                                                      "April 2023", "May 2023", "June 2023", "July 2023", "August 2023", "September 2023", 
+                                                                      "October 2023", "November 2023", "December 2023", "January 2024", "February 2024", 
+                                                                      "March 2024", "April 2024")) #redo levels for monthYR
 
 #importing all known orphan tags
 orphanTags <- read.csv ("NonPetersonAcousticTags.xlsx - NonSBU_KnownTags_20240109.csv", header = TRUE)
@@ -85,17 +98,26 @@ orphanTags$Type <- as.factor(orphanTags$Type)
 
 #importing all Peterson lab OTN metadata
 orstedTags <- read.csv ("Sunrise_Orsted_otn_metadata_tagging.xlsx - Tag Metadata.csv", header = TRUE)
-orstedTags <- clean_names(orstedTags)
-orstedTags <- subset(orstedTags, select = -c(transmitter))
-orstedTags$project <- "Orsted"
+orstedTags <- clean_names(orstedTags) %>% 
+  select(c(animal_id_floy_tag_id_pit_tag_code_etc, tag_serial_number, tag_id_code, tag_code_space, 
+           est_tag_life, common_name_e, scientific_name, 
+           utc_release_date_time, release_location, release_latitude, release_longitude, 
+           length_m, length_type, life_stage, tag_owner_organization, tag_owner_pi, comments)) %>% 
+  mutate(project = "Orsted")
 llabTags <- read.csv ("LLab_otn_metadata_tagging.xlsx - Tag Metadata.csv", header = TRUE)
-llabTags <- clean_names(llabTags)
-llabTags <- subset(llabTags, select = -c(harvest_date))
-llabTags$project <- "Landscape Lab"
+llabTags <- clean_names(llabTags) %>% 
+  select(c(animal_id_floy_tag_id_pit_tag_code_etc, tag_serial_number, tag_id_code, tag_code_space, 
+           est_tag_life, common_name_e, scientific_name, 
+           utc_release_date_time, release_location, release_latitude, release_longitude, 
+           length_m, length_type, life_stage, tag_owner_organization, tag_owner_pi, comments)) %>% 
+  mutate(project = "Landscape Lab")
 liarsTags <- read.csv ("NYSDEC_otn_metadata_tagging.xlsx - Tag Metadata.csv", header = TRUE)
-liarsTags <- clean_names(liarsTags)
-liarsTags <- subset(liarsTags, select = -c(harvest_date))
-liarsTags$project <- "NYS Artificial Reef"
+liarsTags <- clean_names(liarsTags) %>% 
+  select(c(animal_id_floy_tag_id_pit_tag_code_etc, tag_serial_number, tag_id_code, tag_code_space, 
+           est_tag_life, common_name_e, scientific_name, 
+           utc_release_date_time, release_location, release_latitude, release_longitude, 
+           length_m, length_type, life_stage, tag_owner_organization, tag_owner_pi, comments)) %>% 
+  mutate(project = "Artificial Reef")
 petersonTags <- rbind(orstedTags, llabTags, liarsTags)
 petersonTags$Type <- "Animal"
 #adjusting the column headers that way they match what is being used for the orphan tags
@@ -202,7 +224,14 @@ table1<- mergedDetectionsTags %>%
   gt()
 table1
 
-table2 <- mergedDetectionsTags %>%
+table2a <- mergedDetectionsTags %>%
+  filter(common_name == "Atlantic sturgeon") %>%
+  group_by(Station.Name) %>%
+  summarise(stationCount = n()) %>% 
+  gt()
+table2a
+
+table2b <- mergedDetectionsTags %>%
   filter(common_name == "Atlantic sturgeon") %>%
   group_by(Station.Name, tag_id) %>%
   summarise(countDetect = n()) %>% 
@@ -213,7 +242,7 @@ table2 <- mergedDetectionsTags %>%
             SE = SD/sqrt(indiv)) %>%
   mutate_at(vars(av, SD, SE), list(~ round(., 1))) %>%
   gt()
-table2
+table2b
 
 #----- general information for sturgeon detections and residency -----#
 #this is to get time difference between first detection and last detection included from these VRL files
@@ -337,7 +366,7 @@ otherDetections <- ggplot(data=test %>% filter(common_name != "Atlantic sturgeon
              color="grey", size=0.5, alpha=0.5) +
   geom_point( aes(color=common_name), color="red", size=1.2 ) +
   scale_color_viridis(discrete = TRUE) +
-  scale_x_date(date_breaks = "4 month", date_minor_breaks = "1 week", date_labels ="%b\n%y") +
+  scale_x_date(date_breaks = "6 month", date_minor_breaks = "1 week", date_labels ="%b\n%y") +
   labs(title= "", x ="", y ="") + 
   facet_wrap(~Label) +
   theme_bw() +
@@ -434,6 +463,16 @@ annotate_figure(allUniqueTransmitters, left = text_grob("Unique transmitters", r
                 bottom = text_grob("Month", size = 20, face = "bold"))
 ggsave(paste0(owd,"/","SpeciesIndiv_DotPlot.png"), width = 19, height = 10) 
 
+maxIndividuals <- mergedDetectionsTags %>%
+  dplyr::mutate(dummy = "Unknown") %>%
+  mutate(commonName2 = coalesce(common_name, dummy)) %>% #
+  dplyr::select(-dummy) %>%
+  group_by(common_name, commonName2, dateEST) %>%
+  summarise(indiv = length(unique(tag_id))) %>%
+  mutate(common_name = if_else(is.na(as.character(common_name)), 'Unknown', as.character(common_name))) %>%  
+  mutate(max_value = indiv[which.max(indiv)]) %>%
+  ungroup() 
+
 #----- figure 5: abacus plot of atlantic sturgeon presence at the 10 stations -----#
 stationAbacus <- mergedDetectionsTags %>%
   filter(common_name == "Atlantic sturgeon") %>%
@@ -517,7 +556,7 @@ test <- mergedDetectionsTags %>%
   summarise(count = n()) %>%
   ggplot(aes(x = fakeDate, y = count)) +
   geom_point() +
-  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cc")) +
   labs(title= "", x ="Date", y ="Detection count") + #making the label the same for shape and color merged the legend
   theme_bw() +
   scale_x_datetime(date_breaks = "2 month", date_labels ="%b") +
