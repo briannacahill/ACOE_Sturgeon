@@ -283,7 +283,7 @@ sturgDetectStats
 #----- map: number of sturgeon detections for each receiver and number of sturgeon detected -----#
 sturgeonMapDetections <- mergedDetectionsTags %>%
   filter(common_name == "Atlantic sturgeon") %>%
-  group_by(Station.Name, Latitude, Longitude) %>%
+  group_by(Station.Name, station, Latitude, Longitude) %>%
   summarise(countDetect = n(), 
             countIndiv = n_distinct(tag_id), 
             detectSturgeon = countDetect/countIndiv) %>%
@@ -544,7 +544,7 @@ sturgeonAbacus <- mergedDetectionsTags %>%
 sturgeonAbacus
 ggsave(paste0(owd,"/","SturgeonAbacus.png"), width = 19, height = 10)  
 
-#----- gam smooths for sturgeon data -----#
+#----- gam smooths for sturgeon detections -----#
 test <- mergedDetectionsTags %>%
   filter(common_name == "Atlantic sturgeon") %>%
   #mutate(ordinalDay = yday(dateEST)) %>% #this wasnt used here but still valuable to hold onto
@@ -556,7 +556,7 @@ test <- mergedDetectionsTags %>%
   summarise(count = n()) %>%
   ggplot(aes(x = fakeDate, y = count)) +
   geom_point() +
-  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cc")) +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cc", k = 10)) +
   labs(title= "", x ="Date", y ="Detection count") + #making the label the same for shape and color merged the legend
   theme_bw() +
   scale_x_datetime(date_breaks = "2 month", date_labels ="%b") +
@@ -572,6 +572,36 @@ test <- mergedDetectionsTags %>%
         legend.position = "bottom", 
         legend.key.width=unit(1,"cm"))
 test
+
+#----- gam smooths for number of unique strugeon detected in array -----#
+uniqueSturgGAM <- mergedDetectionsTags %>%
+  filter(common_name == "Atlantic sturgeon") %>%
+  #mutate(ordinalDay = yday(dateEST)) %>% #this wasnt used here but still valuable to hold onto
+  mutate(monthDay = format(dateEST, '%m-%d'), 
+         fakeYear = "2001", #non leap year and will likely never be included in the actual dataset
+         fakeDate = paste(fakeYear, monthDay, sep = "-"), 
+         fakeDate = as.POSIXct(fakeDate, "%Y-%m-%d")) %>% 
+  group_by(fakeDate) %>%
+  summarise(indiv = n_distinct(tag_id)) %>%
+  ggplot(aes(x = fakeDate, y = indiv)) +
+  geom_point() +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cc", k = 6)) +
+  labs(title= "", x ="Date", y ="Unique sturgeon detected") + #making the label the same for shape and color merged the legend
+  theme_bw() +
+  scale_x_datetime(date_breaks = "1 month", date_labels ="%b") +
+  scale_shape_manual(values = c(15, 16)) +
+  #scale_colour_viridis() +
+  theme(plot.title = element_text(size = 20, face = "bold", hjust = 0.5,),
+        axis.title.x = element_text(size=20, face = "bold"), 
+        axis.text.x=element_text(size=18, color="black", hjust = 0.5),
+        axis.title.y = element_text(size= 20, face = "bold"),
+        axis.text.y=element_text(size=16, color="black"),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        legend.position = "bottom", 
+        legend.key.width=unit(1,"cm"))
+uniqueSturgGAM
+ggsave(paste0(owd,"/","uniqueSturgGAM.png"), width = 19, height = 10)  
 
 #----- sturgeon COA calculations -----#
 sturgCOA <- mergedDetectionsTags %>% 
@@ -591,7 +621,7 @@ sf_receivers <- sf::st_as_sf(receivers, coords = c("Longitude", "Latitude"),
   sf::st_transform(32618)
 
 sturgeonCOA <- ggplot() +
-  geom_sf(data = sf_sturgCOA, aes(color = "red"), alpha = 0.4, shape = 16) +
+  geom_sf(data = sf_sturgCOA, aes(color = "red"), alpha = 0.2, shape = 16) +
   geom_sf(data = sf_receivers, aes(color = "black"), size = 3.5) +#this should be geom_sf but having CRS issues for some reason
   annotation_scale(location = "bl", width_hint = 0.13) +
   annotation_north_arrow(location = "br", which_north = "true", 
@@ -600,7 +630,7 @@ sturgeonCOA <- ggplot() +
   coord_sf(xlim = c( st_bbox(sf_sturgCOA)[["xmin"]]-0.001,  st_bbox(sf_sturgCOA)[["xmax"]]+0.001), 
            ylim = c( st_bbox(sf_sturgCOA)[["ymin"]]-0.001,  st_bbox(sf_sturgCOA)[["ymax"]]+0.001))  +
   theme_minimal() +
-  scale_fill_manual(values = c(alpha("orange", 0.5), alpha("yellow", 0.2)), labels = c("50%", "95%")) + #these effectively make the legend
+  #scale_fill_manual(values = c(alpha("orange", 0.5), alpha("yellow", 0.2)), labels = c("50%", "95%")) + #these effectively make the legend
   scale_color_manual(values = c("black", "red"), labels = c("Receivers", "Animal positions")) + #these effectively make the legend
   #scale_y_continuous(labels = scales::number_format(accuracy = 0.01)) +
   theme(panel.background = element_rect(fill = "white",
@@ -624,11 +654,7 @@ sturgeonCOA <- ggplot() +
 sturgeonCOA
 ggsave(paste0(owd,"/","sturgeonCOA.png"))
 
-# testing out network analysis things -------------------------------------
-
-#have to do a fake network analysis becayse the receivers are within 1 km of each other, doesn't work properly
-  #plus sp is deprecated so need to find an sf workaround for other projects
-
+#----- sturgeon highways of use -----#
 sturg_summary <- mergedDetectionsTags %>%
   filter(common_name == "Atlantic sturgeon") %>%   
   arrange(EST) %>%
@@ -647,11 +673,30 @@ sturg_summary <- mergedDetectionsTags %>%
 #mutate(bearing=argosfilter::bearing(llat, Latitude, llon, Longitude)) %>% # use mutate and argosfilter to add bearings!
 #mutate(dist=argosfilter::distance(llat, Latitude, llon, Longitude)) # use mutate and argosfilter to add distances!
 
-ggplot() +  # xend and yend define your segments
-  geom_segment(data = sturg_summary, aes(x=llon, xend=Longitude, y=llat, yend=Latitude, color = fakeBins, size = fakeBins)) + 
+sturgHighways <- ggplot() +  # xend and yend define your segments
+  geom_segment(data = sturg_summary, aes(x=llon, xend=Longitude, y=llat, yend=Latitude, color = fakeBins, size = fakeBins))+ 
+               #arrow = arrow(length = unit(0.4, "cm"))) + 
   #geom_curve(data = sturg_summary, aes(x=llon, xend=Longitude, y=llat, yend=Latitude, color = fakeBins, size = fakeBins)) +   
-  scale_size_manual(values=c(1, 2, 3)) + # and geom_segment() and geom_curve() will connect them
-geom_point(data = receivers, aes(Longitude, Latitude), color = "black", size = 3.5)    
+  scale_size_manual(name = "", values=c(1, 2, 3)) + 
+  scale_color_manual(name = "", values = c("gray", "orange", "red")) +
+  geom_point(data = receivers, aes(Longitude, Latitude), color = "black", size = 3.5) +
+  theme_bw() +
+  labs(title = expression(paste("Common detection pathways for sturgeon ", italic("Acipenser"), " spp.")),
+       x ="Longitude", y = "Latitude", color = "", color = "") + #, color = "Common detection routes"
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        axis.title.x = element_text(size= 14), 
+        axis.text.x=element_text(size=12, color="black", hjust = 0.5),
+        axis.title.y = element_text(size= 14),
+        axis.text.y=element_text(size=12, color="black"), 
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10, face = "bold")) +
+  theme(legend.position= c(0.07, 0.95),
+        legend.justification= c("left", "top"),
+        legend.spacing.y = unit(-0.1, 'cm'),
+        legend.margin=margin(0,0,0,0),
+        legend.box.margin=margin(0,0,0,0))
+sturgHighways
+ggsave(paste0(owd,"/","sturgHighways.png"))
   
 # omitted stuff -----------------------------------------------------------
 
